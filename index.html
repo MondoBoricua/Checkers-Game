@@ -72,6 +72,19 @@
             font-size: 18px;
             cursor: pointer;
         }
+
+        /* Fuegos artificiales */
+        #fireworks {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            color: gold;
+            text-align: center;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
@@ -81,12 +94,13 @@
         Tiempo: <span id="time">00:00</span>
     </div>
     <div class="scoreboard">
-        <div>Puntuación Negra: <span id="redScore">0</span></div>
-        <div>Puntuación Roja: <span id="blackScore">0</span></div>
+        <div>Puntuación Roja: <span id="redScore">0</span></div>
+        <div>Puntuación Negra: <span id="blackScore">0</span></div>
     </div>
     <div class="cancel-selection">
         <button id="cancelButton">Cancelar Selección</button>
     </div>
+    <div id="fireworks">¡Felicidades! <span id="winner"></span> gana.</div>
 
     <script>
         const board = document.querySelector('.board');
@@ -95,6 +109,8 @@
         const cancelButton = document.getElementById('cancelButton');
         const redScoreDisplay = document.getElementById('redScore');
         const blackScoreDisplay = document.getElementById('blackScore');
+        const fireworksDisplay = document.getElementById('fireworks');
+        const winnerDisplay = document.getElementById('winner');
 
         let timerInterval;
         let secondsElapsed = 0;
@@ -185,6 +201,7 @@
 
             // Calcular las posibles direcciones
             const directions = getDirections(cell);
+            let canMove = false;
             directions.forEach(direction => {
                 const [newRow, newCol] = direction;
                 if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) { // Asegurarse de que esté dentro del tablero
@@ -193,6 +210,7 @@
                         if (isForwardMove(cell, targetCell)) {
                             targetCell.classList.add('highlight');
                             targetCell.addEventListener('click', onCellClick); // Agregar evento para mover la pieza
+                            canMove = true;
                         }
                     } else if (targetCell && targetCell.firstChild && boardState[newRow][newCol] !== currentTurn) {
                         // Verificar si es una pieza contraria para poder saltar
@@ -207,11 +225,16 @@
                                     removePiece(targetCell); // Remover la pieza capturada
                                     updateScore(); // Actualizar puntuación
                                 });
+                                canMove = true;
                             }
                         }
                     }
                 }
             });
+
+            if (!canMove) {
+                checkForWinner(); // Verificar si no hay movimientos posibles
+            }
         }
 
         // Verificar si el movimiento es hacia adelante, no hacia atrás
@@ -226,8 +249,8 @@
             }
         }
 
-        // Obtener direcciones posibles, restringiendo el movimiento hacia atrás
-        function getDirections(cell) {
+                // Obtener direcciones posibles, restringiendo el movimiento hacia atrás
+                function getDirections(cell) {
             const row = parseInt(cell.dataset.row);
             const col = parseInt(cell.dataset.col);
             const pieceColor = boardState[row][col];
@@ -248,6 +271,7 @@
                 cell.classList.remove('highlight');
                 cell.removeEventListener('click', onCellClick); // Remover el evento después del movimiento
             });
+
             // Limpiar la selección anterior
             document.querySelectorAll('.selected').forEach(cell => {
                 cell.classList.remove('selected');
@@ -286,12 +310,75 @@
         // Actualizar la puntuación después de capturar una pieza
         function updateScore() {
             if (currentTurn === 'red') {
+                blackScore++;  // Invertimos las puntuaciones para reflejar la captura correcta
+                blackScoreDisplay.textContent = blackScore;
+            } else if (currentTurn === 'black') {
                 redScore++;
                 redScoreDisplay.textContent = redScore;
-            } else if (currentTurn === 'black') {
-                blackScore++;
-                blackScoreDisplay.textContent = blackScore;
             }
+        }
+
+        // Verificar si quedan movimientos posibles y determinar el ganador
+        function checkForWinner() {
+            let redCanMove = false;
+            let blackCanMove = false;
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const pieceColor = boardState[row][col];
+                    if (pieceColor === 'red' && hasValidMove(row, col)) {
+                        redCanMove = true;
+                    }
+                    if (pieceColor === 'black' && hasValidMove(row, col)) {
+                        blackCanMove = true;
+                    }
+                }
+            }
+
+            if (!redCanMove || !blackCanMove) {
+                declareWinner(redCanMove, blackCanMove);
+            }
+        }
+
+        // Verificar si una pieza tiene un movimiento válido
+        function hasValidMove(row, col) {
+            const directions = getDirections({ dataset: { row, col } });
+            return directions.some(direction => {
+                const [newRow, newCol] = direction;
+                if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                    const targetCell = boardState[newRow][newCol];
+                    return !targetCell || (targetCell !== currentTurn && canJump(row, col, newRow, newCol));
+                }
+                return false;
+            });
+        }
+
+        // Verificar si se puede saltar una pieza enemiga
+        function canJump(originRow, originCol, targetRow, targetCol) {
+            const jumpRow = targetRow + (targetRow - originRow);
+            const jumpCol = targetCol + (targetCol - originCol);
+            return (
+                jumpRow >= 0 &&
+                jumpRow < 8 &&
+                jumpCol >= 0 &&
+                jumpCol < 8 &&
+                !boardState[jumpRow][jumpCol]
+            );
+        }
+
+        // Declarar el ganador y mostrar los fuegos artificiales
+        function declareWinner(redCanMove, blackCanMove) {
+            let winner = '';
+            if (!redCanMove && blackCanMove) {
+                winner = 'Negro';
+            } else if (!blackCanMove && redCanMove) {
+                winner = 'Rojo';
+            } else {
+                winner = redScore > blackScore ? 'Rojo' : 'Negro';
+            }
+
+            winnerDisplay.textContent = winner;
+            fireworksDisplay.style.display = 'block';
         }
 
         // Cambiar el turno entre los jugadores
@@ -304,6 +391,7 @@
         function onCellClick(event) {
             const targetCell = event.target;
             movePiece(selectedPiece, targetCell);
+            checkForWinner(); // Verificar si hay un ganador después de cada movimiento
         }
 
         // Función para cancelar la selección
