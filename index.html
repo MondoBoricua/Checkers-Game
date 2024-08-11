@@ -49,11 +49,28 @@
             background-color: yellow;
         }
 
-        /* Estilo del cronómetro y turno */
-        .timer, .turn {
+        .selected {
+            background-color: green !important; /* El recuadro se pondrá verde cuando se seleccione */
+        }
+
+        /* Estilo del cronómetro, turno, puntuación y botón de cancelar */
+        .timer, .turn, .scoreboard, .cancel-selection {
             text-align: center;
             font-size: 24px;
             margin-top: 20px;
+        }
+
+        .scoreboard {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+        }
+
+        .cancel-selection button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -63,16 +80,28 @@
     <div class="timer">
         Tiempo: <span id="time">00:00</span>
     </div>
+    <div class="scoreboard">
+        <div>Puntuación Negra: <span id="redScore">0</span></div>
+        <div>Puntuación Roja: <span id="blackScore">0</span></div>
+    </div>
+    <div class="cancel-selection">
+        <button id="cancelButton">Cancelar Selección</button>
+    </div>
 
     <script>
         const board = document.querySelector('.board');
         const timeDisplay = document.getElementById('time');
         const currentTurnDisplay = document.getElementById('currentTurn');
+        const cancelButton = document.getElementById('cancelButton');
+        const redScoreDisplay = document.getElementById('redScore');
+        const blackScoreDisplay = document.getElementById('blackScore');
 
         let timerInterval;
         let secondsElapsed = 0;
         let selectedPiece = null;
         let currentTurn = 'red'; // Comienza el turno del jugador rojo
+        let redScore = 0;
+        let blackScore = 0;
 
         // Crear el tablero
         const boardState = Array(8).fill().map(() => Array(8).fill(null));
@@ -138,7 +167,9 @@
             if (selectedPiece) {
                 movePiece(selectedPiece, cell);
             } else {
+                clearHighlights();
                 selectedPiece = piece;
+                cell.classList.add('selected');
                 highlightMoves(cell);
                 startTimer();
             }
@@ -159,26 +190,43 @@
                 if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) { // Asegurarse de que esté dentro del tablero
                     const targetCell = document.querySelector(`.cell[data-row="${newRow}"][data-col="${newCol}"]`);
                     if (targetCell && !targetCell.firstChild) {
-                        targetCell.classList.add('highlight');
-                        targetCell.addEventListener('click', onCellClick); // Agregar evento para mover la pieza
+                        if (isForwardMove(cell, targetCell)) {
+                            targetCell.classList.add('highlight');
+                            targetCell.addEventListener('click', onCellClick); // Agregar evento para mover la pieza
+                        }
                     } else if (targetCell && targetCell.firstChild && boardState[newRow][newCol] !== currentTurn) {
                         // Verificar si es una pieza contraria para poder saltar
                         const jumpRow = newRow + (newRow - row);
                         const jumpCol = newCol + (newCol - col);
                         const jumpCell = document.querySelector(`.cell[data-row="${jumpRow}"][data-col="${jumpCol}"]`);
                         if (jumpCell && !jumpCell.firstChild && jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
-                            jumpCell.classList.add('highlight');
-                            jumpCell.addEventListener('click', () => {
-                                movePiece(selectedPiece, jumpCell);
-                                removePiece(targetCell); // Remover la pieza capturada
-                            });
+                            if (isForwardMove(cell, jumpCell)) {
+                                jumpCell.classList.add('highlight');
+                                jumpCell.addEventListener('click', () => {
+                                    movePiece(selectedPiece, jumpCell);
+                                    removePiece(targetCell); // Remover la pieza capturada
+                                    updateScore(); // Actualizar puntuación
+                                });
+                            }
                         }
                     }
                 }
             });
         }
 
-        // Obtener direcciones posibles
+        // Verificar si el movimiento es hacia adelante, no hacia atrás
+        function isForwardMove(originCell, targetCell) {
+            const originRow = parseInt(originCell.dataset.row);
+            const targetRow = parseInt(targetCell.dataset.row);
+
+            if (currentTurn === 'red') {
+                return targetRow < originRow; // Rojo solo se mueve hacia arriba
+            } else if (currentTurn === 'black') {
+                return targetRow > originRow; // Negro solo se mueve hacia abajo
+            }
+        }
+
+        // Obtener direcciones posibles, restringiendo el movimiento hacia atrás
         function getDirections(cell) {
             const row = parseInt(cell.dataset.row);
             const col = parseInt(cell.dataset.col);
@@ -194,11 +242,15 @@
             return directions;
         }
 
-        // Limpiar las celdas resaltadas
+        // Limpiar las celdas resaltadas y la selección actual
         function clearHighlights() {
             document.querySelectorAll('.highlight').forEach(cell => {
                 cell.classList.remove('highlight');
                 cell.removeEventListener('click', onCellClick); // Remover el evento después del movimiento
+            });
+            // Limpiar la selección anterior
+            document.querySelectorAll('.selected').forEach(cell => {
+                cell.classList.remove('selected');
             });
         }
 
@@ -231,6 +283,17 @@
             boardState[row][col] = null;
         }
 
+        // Actualizar la puntuación después de capturar una pieza
+        function updateScore() {
+            if (currentTurn === 'red') {
+                redScore++;
+                redScoreDisplay.textContent = redScore;
+            } else if (currentTurn === 'black') {
+                blackScore++;
+                blackScoreDisplay.textContent = blackScore;
+            }
+        }
+
         // Cambiar el turno entre los jugadores
         function switchTurn() {
             currentTurn = currentTurn === 'red' ? 'black' : 'red';
@@ -242,6 +305,13 @@
             const targetCell = event.target;
             movePiece(selectedPiece, targetCell);
         }
+
+        // Función para cancelar la selección
+        cancelButton.addEventListener('click', function() {
+            clearHighlights();
+            selectedPiece = null;
+            clearInterval(timerInterval);
+        });
 
         // Inicializar el tablero
         createBoard();
