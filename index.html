@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Damas</title>
+    <style>
+        /* Estilo del tablero */
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px);
+            gap: 0;
+            margin: 20px auto;
+        }
+
+        .cell {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .cell.black {
+            background-color: black;
+        }
+
+        .cell.white {
+            background-color: white;
+        }
+
+        .piece {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .piece.red {
+            background-color: red;
+        }
+
+        .piece.black {
+            background-color: darkgray;
+        }
+
+        .highlight {
+            background-color: yellow;
+        }
+
+        /* Estilo del cronómetro y turno */
+        .timer, .turn {
+            text-align: center;
+            font-size: 24px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="board"></div>
+    <div class="turn">Turno de: <span id="currentTurn">Rojo</span></div>
+    <div class="timer">
+        Tiempo: <span id="time">00:00</span>
+    </div>
+
+    <script>
+        const board = document.querySelector('.board');
+        const timeDisplay = document.getElementById('time');
+        const currentTurnDisplay = document.getElementById('currentTurn');
+
+        let timerInterval;
+        let secondsElapsed = 0;
+        let selectedPiece = null;
+        let currentTurn = 'red'; // Comienza el turno del jugador rojo
+
+        // Crear el tablero
+        const boardState = Array(8).fill().map(() => Array(8).fill(null));
+
+        // Función para iniciar el cronómetro
+        function startTimer() {
+            clearInterval(timerInterval);
+            secondsElapsed = 0;
+            timerInterval = setInterval(() => {
+                secondsElapsed++;
+                timeDisplay.textContent = formatTime(secondsElapsed);
+            }, 1000);
+        }
+
+        // Formatear el tiempo en minutos y segundos
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Función para crear las celdas del tablero
+        function createBoard() {
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell', (row + col) % 2 === 0 ? 'white' : 'black');
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    board.appendChild(cell);
+
+                    // Colocar las piezas en su posición inicial
+                    if (row < 3 && (row + col) % 2 !== 0) {
+                        createPiece(cell, 'black');
+                    } else if (row > 4 && (row + col) % 2 !== 0) {
+                        createPiece(cell, 'red');
+                    }
+                }
+            }
+        }
+
+        // Función para crear una pieza
+        function createPiece(cell, color) {
+            const piece = document.createElement('div');
+            piece.classList.add('piece', color);
+            piece.addEventListener('click', onPieceClick);
+            cell.appendChild(piece);
+            boardState[cell.dataset.row][cell.dataset.col] = color;
+        }
+
+        // Función para manejar el clic en una pieza
+        function onPieceClick(event) {
+            const piece = event.target;
+            const cell = piece.parentElement;
+            const pieceColor = boardState[cell.dataset.row][cell.dataset.col];
+
+            // Verificar si es el turno correcto
+            if (pieceColor !== currentTurn) {
+                return; // Si no es el turno de esta pieza, no hacer nada
+            }
+
+            // Si ya hay una pieza seleccionada, moverla
+            if (selectedPiece) {
+                movePiece(selectedPiece, cell);
+            } else {
+                selectedPiece = piece;
+                highlightMoves(cell);
+                startTimer();
+            }
+        }
+
+        // Resaltar posibles movimientos
+        function highlightMoves(cell) {
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
+
+            // Limpiar los movimientos resaltados previos
+            clearHighlights();
+
+            // Calcular las posibles direcciones
+            const directions = getDirections(cell);
+            directions.forEach(direction => {
+                const [newRow, newCol] = direction;
+                if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) { // Asegurarse de que esté dentro del tablero
+                    const targetCell = document.querySelector(`.cell[data-row="${newRow}"][data-col="${newCol}"]`);
+                    if (targetCell && !targetCell.firstChild) {
+                        targetCell.classList.add('highlight');
+                        targetCell.addEventListener('click', onCellClick); // Agregar evento para mover la pieza
+                    } else if (targetCell && targetCell.firstChild && boardState[newRow][newCol] !== currentTurn) {
+                        // Verificar si es una pieza contraria para poder saltar
+                        const jumpRow = newRow + (newRow - row);
+                        const jumpCol = newCol + (newCol - col);
+                        const jumpCell = document.querySelector(`.cell[data-row="${jumpRow}"][data-col="${jumpCol}"]`);
+                        if (jumpCell && !jumpCell.firstChild && jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+                            jumpCell.classList.add('highlight');
+                            jumpCell.addEventListener('click', () => {
+                                movePiece(selectedPiece, jumpCell);
+                                removePiece(targetCell); // Remover la pieza capturada
+                            });
+                        }
+                    }
+                }
+            });
+        }
+
+        // Obtener direcciones posibles
+        function getDirections(cell) {
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
+            const pieceColor = boardState[row][col];
+            const directions = [];
+
+            if (pieceColor === 'red') {
+                directions.push([row - 1, col - 1], [row - 1, col + 1]);
+            } else if (pieceColor === 'black') {
+                directions.push([row + 1, col - 1], [row + 1, col + 1]);
+            }
+
+            return directions;
+        }
+
+        // Limpiar las celdas resaltadas
+        function clearHighlights() {
+            document.querySelectorAll('.highlight').forEach(cell => {
+                cell.classList.remove('highlight');
+                cell.removeEventListener('click', onCellClick); // Remover el evento después del movimiento
+            });
+        }
+
+        // Mover la pieza seleccionada
+        function movePiece(piece, targetCell) {
+            const originCell = piece.parentElement;
+            const originRow = parseInt(originCell.dataset.row);
+            const originCol = parseInt(originCell.dataset.col);
+            const targetRow = parseInt(targetCell.dataset.row);
+            const targetCol = parseInt(targetCell.dataset.col);
+
+            const validMove = targetCell.classList.contains('highlight');
+
+            if (validMove) {
+                targetCell.appendChild(piece);
+                boardState[targetRow][targetCol] = boardState[originRow][originCol];
+                boardState[originRow][originCol] = null;
+                clearHighlights();
+                selectedPiece = null;
+                clearInterval(timerInterval);
+                switchTurn(); // Cambiar el turno después de un movimiento válido
+            }
+        }
+
+        // Remover una pieza capturada
+        function removePiece(cell) {
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
+            cell.removeChild(cell.firstChild);
+            boardState[row][col] = null;
+        }
+
+        // Cambiar el turno entre los jugadores
+        function switchTurn() {
+            currentTurn = currentTurn === 'red' ? 'black' : 'red';
+            currentTurnDisplay.textContent = currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1);
+        }
+
+        // Manejar el clic en una celda resaltada
+        function onCellClick(event) {
+            const targetCell = event.target;
+            movePiece(selectedPiece, targetCell);
+        }
+
+        // Inicializar el tablero
+        createBoard();
+    </script>
+</body>
+</html>
